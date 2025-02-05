@@ -1,7 +1,7 @@
 {
-  "name": "mlcli",
+  "name": "mlcli-ess",
   "version": "1.0.0",
-  "description": "",
+  "description": "cli tool for parsing and reviwing ESS ML JSON",
   "main": "mlcli.js",
   "type": "module",
   "bin": {

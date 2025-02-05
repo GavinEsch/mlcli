@@ -1,6 +1,6 @@
 # MLCLI: Machine Learning Job Configuration CLI
 
-![MLCLI](https://img.shields.io/badge/Version-0.1.3-blue.svg) ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D14.0-brightgreen.svg) ![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)
+![MLCLI](https://img.shields.io/badge/Version-0.1.4-blue.svg) ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D14.0-brightgreen.svg) ![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)
 
 ## Overview
 MLCLI is a powerful command-line interface (CLI) tool designed for managing, tracking, searching, comparing, and exporting machine learning job configurations from Elastic (ESS). It provides version control, fuzzy search, color-coded diffing, and structured output for better usability.

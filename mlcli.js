@@ -1,5 +1,4 @@
-// Add these exports at the end of your mlcli.js file
-export { importJobs, searchJobs, compareJobVersions, exportJobs }; // Replace with your actual function names#!/usr/bin/env node
+#!/usr/bin/env node
 
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -21,7 +20,7 @@ fs.ensureDirSync(path.dirname(SETTINGS_FILE));
 
 function loadSettings() {
     if (!fs.existsSync(SETTINGS_FILE)) {
-      return { columns: [] }; // Default to empty columns
+      return { columns: [] };
     }
     return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
   }
@@ -97,34 +96,49 @@ program
       console.log(chalk.cyan('🔍 Running search...'));
 
       const settings = loadSettings();
-      const selectedColumns = settings.columns;
+      const selectedColumns = settings.columns.length > 0 ? settings.columns : [
+        "job_id", "Rule_Name", "created_by", "groups", "description", "bucket_span",
+        "detectors", "influencers", "model_prune_window", "model_memory_limit",
+        "cat_limit", "retention_days", "datafeed_id", "query", "indices"
+      ];
+
       const jobDirs = fs.readdirSync(JOBS_DIR);
       let results = [];
 
       jobDirs.forEach((jobId) => {
         const jobFile = path.join(JOBS_DIR, jobId, 'latest.json');
         if (fs.existsSync(jobFile)) {
-          const jobData = JSON.parse(fs.readFileSync(jobFile, 'utf8')).job;
+          const fullJobData = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
+          const {job} = fullJobData;
+          const datafeed = fullJobData.datafeed || {};
 
           const jobEntry = {
-            Job_ID: jobData.job_id,
-            Description: jobData.description || 'N/A',
-            Groups: jobData.groups?.join(', ') || 'N/A',
-            Bucket_Span: jobData.analysis_config?.bucket_span || 'N/A',
-            Created_By: jobData.custom_settings?.created_by || 'N/A',
-            Model_Memory: jobData.analysis_limits?.model_memory_limit || 'N/A'
+            job_id: job.job_id || "N/A",
+            Rule_Name: job.custom_settings?.security_app_display_name || "N/A",
+            created_by: job.custom_settings?.created_by || "N/A",
+            groups: job.groups ? job.groups.join(', ') : "N/A",
+            description: job.description || "N/A",
+            bucket_span: job.analysis_config?.bucket_span || "N/A",
+            detectors: job.analysis_config?.detectors?.map(d => d.detector_description).join(' | ') || "N/A",
+            influencers: job.analysis_config?.influencers?.join(', ') || "N/A",
+            model_prune_window: job.analysis_config?.model_prune_window || "N/A",
+            model_memory_limit: job.analysis_limits?.model_memory_limit || "N/A",
+            cat_limit: job.analysis_limits?.categorization_examples_limit || "N/A",
+            retention_days: job.model_snapshot_retention_days || "N/A",
+            datafeed_id: datafeed.datafeed_id || "N/A",
+            indices: datafeed.indices ? datafeed.indices.join(', ') : "N/A",
+            query: simplifyQuery(datafeed.query)
           };
 
           results.push(jobEntry);
         }
       });
 
-      // **Fuzzy Search Implementation**
       if (options.fuzzy) {
         console.log(chalk.yellow(`🔍 Performing fuzzy search for: ${options.fuzzy}`));
 
         const fuse = new Fuse(results, {
-          keys: ["Job_ID", "Description", "Created_By", "Groups"],
+          keys: ["job_id", "Rule_Name", "created_by", "groups", "description"],
           threshold: 0.3,
         });
 
@@ -132,30 +146,61 @@ program
       }
 
       if (options.jobId) {
-        results = results.filter(job => job.Job_ID === options.jobId);
+        results = results.filter(job => job.job_id === options.jobId);
       }
 
       if (results.length === 0) {
         console.log(chalk.yellow('⚠️ No jobs found matching criteria.'));
-      } else {
-        const tableHeaders = selectedColumns;
-        const table = new Table({
-          head: tableHeaders,
-          colWidths: tableHeaders.map(() => 20)
-        });
-
-        results.forEach(job => {
-          table.push(tableHeaders.map(header => job[header] || 'N/A'));
-        });
-
-        console.log(table.toString());
+        return;
       }
+
+      const tableHeaders = selectedColumns.map(col => col.replace(/_/g, ' '));
+      const table = new Table({ head: tableHeaders, wordWrap: true });
+
+      results.forEach(job => {
+        table.push(selectedColumns.map(header => job[header] || 'N/A'));
+      });
+
+      console.log(table.toString());
+
     } catch (error) {
       console.error(chalk.red(`❌ Search failed: ${error.message}`));
     }
   });
 
-// **Command: Compare Job Versions (Default: Latest vs Previous)**
+  function simplifyQuery(query) {
+    if (!query || !query.bool) {
+      return "N/A";
+    }
+  
+    let filters = [];
+    
+    if (query.bool.filter) {
+      filters = query.bool.filter.flatMap(filter => {
+        if (filter.match_phrase) {
+          return Object.entries(filter.match_phrase).map(([field, value]) => `${field}: ${value}`);
+        }
+        return [];
+      });
+    }
+  
+    let datasets = [];
+    if (query.bool.should) {
+      datasets = query.bool.should.flatMap(should => {
+        if (should.bool && should.bool.should) {
+          return should.bool.should.flatMap(term => {
+            if (term.term && term.term["data_stream.dataset"]) {
+              return term.term["data_stream.dataset"].value;
+            }
+            return [];
+          });
+        }
+        return [];
+      });
+    }
+  
+    return `Dataset: [${datasets.join(', ')}] | Filters: ${filters.join(', ')}`;
+  }
 // **Command: Compare Job Versions (Default: Summarized, Full Diff Optional, Compare All)**
 program
   .command('compare [job_id]')
@@ -167,7 +212,6 @@ program
       let jobsToCompare = [];
 
       if (options.all) {
-        // Compare all jobs
         jobsToCompare = fs.readdirSync(JOBS_DIR).filter((dir) => fs.lstatSync(path.join(JOBS_DIR, dir)).isDirectory());
       } else {
         if (!job_id) {
@@ -184,11 +228,10 @@ program
           return;
         }
 
-        // Get all version files and sort them
         const versionFiles = fs.readdirSync(jobDir)
           .filter(file => file.startsWith('v') && file.endsWith('.json'))
           .map(file => parseInt(file.match(/v(\d+)\.json/)[1]))
-          .sort((a, b) => b - a); // Sort descending
+          .sort((a, b) => b - a); 
 
         if (versionFiles.length < 2) {
           console.error(chalk.red(`Error: Not enough versions to compare for job ${job_id}.`));
@@ -212,7 +255,6 @@ program
         console.log(chalk.blue(`\n========== Comparing Job: ${job_id} ==========`));
         console.log(chalk.cyan(`🔍 Summarized Differences for Job ${job_id}:`));
         
-        // Use json-diff for a cleaner summary
         const formattedDiff = diffString(jobData1, jobData2);
         console.log(chalk.yellow(formattedDiff || 'No differences found.'));
 
@@ -230,7 +272,7 @@ program
       console.error(chalk.red(`Comparison failed: ${error.message}`));
     }
   });
-// **Command: Export Jobs with Conditional Column Filtering**
+
 // **Command: Export Jobs with Conditional Column Filtering**
 program
   .command('export')
@@ -253,8 +295,6 @@ program
             job: fullJobData.job, 
             datafeed: fullJobData.datafeed || {} 
           };
-
-          // Apply settings **only for CSV and Markdown** if `--settings` is used
           if (useSettings && (format === 'csv' || format === 'md')) {
             jobEntry = Object.fromEntries(
               Object.entries(jobEntry.job).filter(([key]) => settings.columns.includes(key))
@@ -273,7 +313,7 @@ program
       let exportFile;
       let exportData;
       switch (format) {
-        case 'json': // Always export full JSON
+        case 'json':
           exportFile = path.join(EXPORT_DIR, 'jobs.json');
           exportData = JSON.stringify(jobs, null, 2);
           break;
@@ -300,28 +340,91 @@ program
     }
   });
 
-// **Command: Settings (Configurable Columns)**
-program
+    // **Command: Settings (Configurable Columns)**
+    program
   .command('settings')
   .description('Configure mlcli settings')
   .option('--columns <columns>', 'Set visible columns (comma-separated list)')
   .action((options) => {
-    let settings = loadSettings();
+      let settings = loadSettings();
 
-    if (options.columns) {
-      settings.columns = options.columns.split(',').map(col => col.trim());
-      saveSettings(settings);
-      console.log(chalk.green(`✅ Updated visible columns: ${settings.columns.join(', ')}`));
-    } else {
-      console.log(chalk.cyan(`📌 Current settings:\nVisible columns: ${settings.columns.join(', ')}`));
-    }
+      const availableColumns = {
+        "job_id": "Job ID",
+        "security_app_display_name": "Rule Name",
+        "created_by": "Created By",
+        "groups": "Groups",
+        "description": "Description",
+        "bucket_span": "Bucket Span",
+        "detectors": "Detector",
+        "influencers": "Influencers",
+        "model_prune_window": "Model Prune Window",
+        "model_memory_limit": "Model Memory Limit",
+        "categorization_examples_limit": "Cat Limit",
+        "model_snapshot_retention_days": "Retention Days",
+        "datafeed_id": "Datafeed ID",
+        "query": "Query (Simplified)",
+        "indices": "Indices"
+      };
+
+      if (options.columns) {
+          const selected = options.columns.split(',').map(col => col.trim());
+          settings.columns = selected;
+          saveSettings(settings);
+          console.log(chalk.green(`✅ Updated visible columns: ${selected.join(', ')}`));
+      } else {
+          console.log(chalk.cyan(`📌 Available columns:\n`));
+          Object.keys(availableColumns).forEach(key => {
+              const status = settings.columns.includes(key) ? chalk.green('✔ Enabled') : chalk.red('✖ Disabled');
+              console.log(`  ${chalk.yellow(availableColumns[key])} (${key}) - ${status}`);
+          });
+          console.log(chalk.gray(`\nTo enable/disable columns, use: mlcli settings --columns job_id,description,bucket_span`));
+      }
   });
 
-program.parse(process.argv);
 
-module.exports = {
-  importJobs: importJobs, // ... other functions
-};
-module.exports.importJobs = importJobs;
-module.exports.searchJobs = searchJobs;
-// ... other functions
+    // Continuous CLI
+import * as readline from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+
+const rl = readline.createInterface({ input, output });
+
+async function continuousCLI() {
+    let running = true;
+    while (running) {
+        const answer = await rl.question(chalk.blue('mlcli> '));
+        const [command, ...args] = answer.trim().split(/\s+/);
+
+        switch (command.toLowerCase()) {
+            case 'help':
+            case '-h':
+            case '--help':
+                program.help();
+                break;
+            case 'exit':
+                running = false;
+                break;
+            case 'import':
+            case 'search':
+            case 'compare':
+            case 'export':
+            case 'settings':
+                try {
+                    program.parse(['node', 'mlcli.js', command, ...args]);
+                } catch (error) {
+                    console.error(chalk.red(`Error: ${error.message}`)); 
+                }
+                break;
+            case '': 
+                break;
+            default:
+                console.error(chalk.red(`Invalid command: ${command}`));
+        }
+    }
+    rl.close();
+    console.log('Exiting mlcli.');
+}
+
+continuousCLI().catch(err => {
+    console.error("Error in continuous CLI:", err);
+    process.exit(1);
+});

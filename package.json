@@ -1,0 +1,26 @@
+{
+  "name": "mlcli",
+  "version": "1.0.0",
+  "description": "",
+  "main": "mlcli.js",
+  "type": "module",
+  "bin": {
+    "mlcli": "./mlcli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "cli-diff": "^1.0.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "diff": "^7.0.0",
+    "express": "^4.21.2",
+    "fs-extra": "^11.3.0",
+    "fuse.js": "^7.1.0",
+    "json-diff": "^1.0.6",
+    "json2csv": "^6.0.0-alpha.2",
+    "markdown-table": "^3.0.4"
+  }
+}

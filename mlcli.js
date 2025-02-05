@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+// Add these exports at the end of your mlcli.js file
+export { importJobs, searchJobs, compareJobVersions, exportJobs }; // Replace with your actual function names#!/usr/bin/env node
 
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -230,6 +231,7 @@ program
     }
   });
 // **Command: Export Jobs with Conditional Column Filtering**
+// **Command: Export Jobs with Conditional Column Filtering**
 program
   .command('export')
   .description('Export ML jobs in different formats')
@@ -316,3 +318,10 @@ program
   });
 
 program.parse(process.argv);
+
+module.exports = {
+  importJobs: importJobs, // ... other functions
+};
+module.exports.importJobs = importJobs;
+module.exports.searchJobs = searchJobs;
+// ... other functions

@@ -42,7 +42,7 @@ function saveSettings(settings) {
 
 const program = new Command();
 
-// **Command: Import (Only if Changed)**
+// **Command: Import (Only if Changed)** 
 program
   .command('import <file>')
   .description('Import multiple ML job configurations from a JSON file, only if changed')

@@ -5,7 +5,7 @@
   "main": "mlcli.js",
   "type": "module",
   "bin": {
-    "mlcli": "./mlcli.js"
+    "mlcli": "./mlcli.js" 
   },
   "scripts": {
     "test": "echo \"Tests bypassed\""
